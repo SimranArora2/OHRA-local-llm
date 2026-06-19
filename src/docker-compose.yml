@@ -81,10 +81,24 @@ services:
         condition: service_healthy
       llmhandler:
         condition: service_healthy
-    ports:
-      - "2222:8022"
+
+  wcat:
+    build:
+      context: ./WCAT
+      dockerfile: Dockerfile
+    environment:
+      WCAT_SAVE_DIR: /app/downloaded_content
+    volumes:
+      - downloaded_content:/app/downloaded_content
     networks:
       - ohra-network
+    ports:
+      - "8002:8002"
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
 
   telnet-pot:
     build:
@@ -184,5 +198,7 @@ networks:
   ohra-network:
 
 volumes:
+  downloaded_content:
+
   logs:
   data: 

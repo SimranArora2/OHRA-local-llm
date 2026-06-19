@@ -226,36 +226,6 @@ class SSHPot(BaseHoneypot):
         except Exception:
             self.log(f"Could not reach WCAT for URL: {url}", "ERROR")
 
-    def __send_fake_download(self, conn: Channel, url: str):
-        """
-        Send a realistic fake curl download progress bar to the attacker.
-        Makes the honeypot convincing — attacker thinks malware downloaded.
-        """
-        import time
-        filename = url.split("/")[-1] or "malware"
-        fake_size = 4096
-
-        # Fake curl header
-        conn.send(f"  % Total    % Received  % Xferd  Average Speed   Time    Time     Time  Current
-".encode())
-        conn.send(f"                                 Dload  Upload   Total   Spent    Left  Speed
-".encode())
-
-        # Animate progress bar
-        for pct in [10, 25, 50, 75, 100]:
-            received = int(fake_size * pct / 100)
-            bar = "/" * (pct // 10)
-            conn.send(
-                f"{pct:3d} {fake_size:5d} {pct:3d} {received:5d}    0     0   2048      0  0:00:0{pct//25+1}  {bar}".encode()
-            )
-            time.sleep(0.4)
-
-        conn.send(f"
-100 {fake_size} 100 {fake_size}    0     0   2048      0  0:00:02
-".encode())
-        conn.send(f"///////////100% downloaded — saved as '{filename}'
-".encode())
-
     def __send_llm_response(
         self, conn: Channel, s_id: str, ip: str, username: str, user_input: str
     ):
@@ -326,8 +296,8 @@ class SSHPot(BaseHoneypot):
             if dl_url:
                 # log the detected URL
                 self.session_log(s_id, f"DOWNLOAD DETECTED: {dl_url}", "WCAT", "ssh", ip)
-                # send fake progress bar to attacker (blocking, so they see it)
-                self.__send_fake_download(conn, dl_url)
+                # Send simple message to attacker
+                conn.send(b"Downloading... [========================================] 100%\r\n")
                 # dispatch real download to WCAT in background (non-blocking)
                 thread = threading.Thread(
                     target=self.__send_to_wcat,
