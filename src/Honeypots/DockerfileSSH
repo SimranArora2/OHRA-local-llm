@@ -1,0 +1,18 @@
+# ssh honeypot
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+RUN pip3 install --no-cache-dir requests paramiko
+
+RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup --disabled-password
+
+# RUN mkdir -p /app/session_data
+# RUN chown appuser /app/session_data
+
+USER appuser
+
+COPY base_honeypot.py ./
+COPY ssh_honeypot.py ./
+
+ENTRYPOINT ["python3", "ssh_honeypot.py"]

@@ -1,0 +1,14 @@
+{
+    "protocols": {
+        "2000": "ssh",
+        "2001": "ftp",
+        "2002": "http",
+        "2003": "telnet",
+        "2004": "IPP",
+        "2005": "smtp"
+    },
+    "rate_limit": 50,
+    "blacklist_path": "session_data/blacklist.json",
+    "sessionID_path": "session_data/sessions.json",
+    "timeout": 300
+}

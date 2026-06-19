@@ -1,0 +1,24 @@
+# ipp honeypot
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        gcc g++ \
+    && pip3 install --no-cache-dir flask requests uwsgi \
+    && apt-get autoremove --yes gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup --disabled-password
+
+# RUN mkdir -p /app/session_data
+# RUN chown appuser /app/session_data
+
+USER appuser
+
+COPY base_honeypot.py ./
+COPY ipp_honeypot.py ./
+COPY ipp_honeypot.ini ./
+
+ENTRYPOINT ["uwsgi", "--ini", "ipp_honeypot.ini"]

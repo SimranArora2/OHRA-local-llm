@@ -1,0 +1,183 @@
+services:
+  llmhandler:
+    build:
+      context: ./LLMHandler
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/is_ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      HF_HOME: /tmp/hf_cache
+      HOME: /tmp
+    networks:
+      - ohra-network
+    ports:
+      - "8001:8000"
+
+  loghandler:
+    build:
+      context: ./LogHandler
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/is_ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      rate_limit: ${RATE_LIMIT}
+      rate_reset: ${RATE_RESET}
+    dns:
+      - 9.9.9.9
+    networks:
+      - ohra-network
+    ports:
+      - "8000:8000"
+    volumes:
+      - logs:/app/session_logs
+      - logs:/app/error_logs
+      - data:/app/downloaded_content
+  
+  http-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileHTTP
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: llmhandler:8000
+      CREDENTIALS_FILE: "*"
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 8080
+    ports: # remote to in-container
+      - "8080:8000"
+    networks:
+      - ohra-network
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+
+  ssh-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileSSH
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: llmhandler:8000
+      LISTENING_INTERFACE: "0.0.0.0" # inside the container
+      CREDENTIALS_FILE: "*"
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 8022
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+    ports:
+      - "2222:8022"
+    networks:
+      - ohra-network
+
+  telnet-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileTelnet
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: llmhandler:8000
+      LISTENING_INTERFACE: "0.0.0.0" # inside the container
+      CREDENTIALS_FILE: "*"
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 23
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+    ports:
+      - "2323:23"
+    networks:
+      - ohra-network
+
+  ftp-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileFTP
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
+      CREDENTIALS_FILE: "*"
+      LISTENING_INTERFACE: "0.0.0.0" # inside the container
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 21
+    #   - "8021:8000"
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+
+  smtp-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileSMTP
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
+      CREDENTIALS_FILE: "*"
+      LISTENING_INTERFACE: "0.0.0.0" # inside the container
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 25
+    #   - "8025:8000"
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+  
+  snmp-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileSNMP
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
+      CREDENTIALS_FILE: "*"
+      LISTENING_INTERFACE: "0.0.0.0" # inside the container
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 162
+    #   - "8161:8000"
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+
+  ipp-pot:
+    build:
+      context: ./Honeypots
+      dockerfile: DockerfileIPP
+    environment:
+      LOG_HANDLER: loghandler:8000
+      LLM_HANDLER: llmhandler:8000
+      CREDENTIALS_FILE: "*"
+      PYTHONUNBUFFERED: 1
+      LISTENING_PORT: 8631
+    ports:
+     - "8631:8000"
+    networks:
+      - ohra-network
+    depends_on:
+      loghandler:
+        condition: service_healthy
+      llmhandler:
+        condition: service_healthy
+networks:
+  ohra-network:
+
+volumes:
+  logs:
+  data: 

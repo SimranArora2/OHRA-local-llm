@@ -1,0 +1,20 @@
+# ftp honeypot
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+RUN pip3 install --no-cache-dir requests twisted zope.interface
+
+RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup --disabled-password
+
+# ftp needs to bind to a data directory
+# even though commands will be simulated the directory needs to exist
+RUN mkdir -p /app/data
+RUN chown appuser /app/data
+
+USER appuser
+
+COPY base_honeypot.py ./
+COPY ftp_honeypot.py ./
+
+ENTRYPOINT ["python3", "ftp_honeypot.py"]

@@ -1,0 +1,15 @@
+# smtp honeypot
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+RUN pip3 install --no-cache-dir requests twisted
+
+RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup --disabled-password
+
+USER appuser
+
+COPY base_honeypot.py ./
+COPY smtp_honeypot.py ./
+
+ENTRYPOINT ["python3", "smtp_honeypot.py"]
