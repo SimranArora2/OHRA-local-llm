@@ -243,7 +243,8 @@ class SSHPot(BaseHoneypot):
         # log the server response
         self.session_log(s_id, response, "SERVER", "ssh", ip)
         # send response
-        conn.send(f"{response}\r\n".encode())  #replace("\n", "\r\n")- every line break is correct 
+        response = response.replace("\r\n", "\n").replace("\n", "\r\n")
+        conn.send(f"{response}\r\n".encode())
 
     def __handle_interactive(self, conn: Channel, s_id: str, ip: str, username: str):
         """
@@ -275,7 +276,7 @@ class SSHPot(BaseHoneypot):
 
         timeout = time() + 300
         while time() < timeout:
-            conn.send(f"{username}@{self.__server_name}$ ")
+            conn.send(f"{username}@{self.__server_name}$ ".encode())
             try:
                 user_input = self.__parse_line(conn)
                 # user_input = conn.recv(1024).decode(errors="replace").strip()
