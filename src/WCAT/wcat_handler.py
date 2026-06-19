@@ -1,6 +1,9 @@
 """
 WCAT - Web Content Analysis Tool
 Safe, isolated malware download and static analysis for OHRA.
+
+Novel contribution: adds signature-based threat classification on top of
+static analysis — closes the gap where EICAR was detected but not flagged.
 """
 
 import hashlib
@@ -19,6 +22,179 @@ from flask import Flask, request, jsonify
 SAVE_DIR = os.environ.get("WCAT_SAVE_DIR", "/app/downloaded_content")
 app = Flask(__name__)
 
+
+# ──────────────────────────────────────────────
+# Signature Rules (YARA-style string matching)
+# ──────────────────────────────────────────────
+
+SIGNATURE_RULES = [
+    {
+        "name": "EICAR Test File",
+        "severity": "HIGH",
+        "description": "Industry-standard antivirus test file — treated as malware by all AV engines",
+        "patterns": [b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE"],
+    },
+    {
+        "name": "Windows PE Executable",
+        "severity": "MEDIUM",
+        "description": "Windows executable — suspicious if disguised as another file type",
+        "patterns": [b"\x4d\x5a\x90\x00", b"\x4d\x5a\x50\x45"],
+    },
+    {
+        "name": "ELF Linux Executable",
+        "severity": "MEDIUM",
+        "description": "Linux/Unix executable binary",
+        "patterns": [b"\x7fELF"],
+    },
+    {
+        "name": "Reverse Shell Indicators",
+        "severity": "CRITICAL",
+        "description": "Strings commonly found in reverse shell payloads",
+        "patterns": [
+            b"/bin/bash -i",
+            b"bash -i >& /dev/tcp",
+            b"0>&1",
+            b"nc -e /bin/bash",
+            b"nc -e /bin/sh",
+            b"/bin/sh -i",
+        ],
+    },
+    {
+        "name": "Cryptocurrency Miner",
+        "severity": "HIGH",
+        "description": "Strings associated with cryptomining malware",
+        "patterns": [
+            b"stratum+tcp://",
+            b"xmrig",
+            b"cryptonight",
+            b"--donate-level",
+        ],
+    },
+    {
+        "name": "Persistence Mechanisms",
+        "severity": "HIGH",
+        "description": "Commands used to establish persistence on compromised systems",
+        "patterns": [
+            b"crontab -e",
+            b"/etc/cron",
+            b".bashrc",
+            b"systemctl enable",
+            b"rc.local",
+        ],
+    },
+    {
+        "name": "Credential Harvesting",
+        "severity": "CRITICAL",
+        "description": "Strings targeting credential files or auth mechanisms",
+        "patterns": [
+            b"/etc/shadow",
+            b"id_rsa",
+            b".ssh/authorized_keys",
+            b"mimikatz",
+            b"hashdump",
+        ],
+    },
+    {
+        "name": "Lateral Movement Tools",
+        "severity": "HIGH",
+        "description": "Tools used for network scanning and lateral movement",
+        "patterns": [
+            b"nmap -sS",
+            b"masscan",
+            b"hydra",
+            b"metasploit",
+            b"msfvenom",
+        ],
+    },
+    {
+        "name": "Data Exfiltration",
+        "severity": "CRITICAL",
+        "description": "Patterns suggesting data exfiltration attempts",
+        "patterns": [
+            b"curl -X POST",
+            b"wget --post-data",
+            b"tar czf /tmp/",
+        ],
+    },
+    {
+        "name": "Ransomware Indicators",
+        "severity": "CRITICAL",
+        "description": "Strings associated with ransomware behavior",
+        "patterns": [
+            b"openssl enc -aes",
+            b"YOUR FILES HAVE BEEN ENCRYPTED",
+            b"bitcoin",
+            b".encrypted",
+        ],
+    },
+    {
+        "name": "Encoded Payload",
+        "severity": "HIGH",
+        "description": "Base64-encoded payloads commonly used to evade detection",
+        "patterns": [
+            b"base64 -d",
+            b"base64 --decode",
+            b"eval(base64",
+        ],
+    },
+    {
+        "name": "Privilege Escalation",
+        "severity": "CRITICAL",
+        "description": "Techniques used to escalate privileges or hide attacker presence",
+        "patterns": [
+            b"chmod 4755",
+            b"chmod u+s",
+            b"LD_PRELOAD",
+            b"/proc/self/mem",
+        ],
+    },
+]
+
+SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "CLEAN": 4}
+
+
+def match_signatures(data: bytes) -> dict:
+    """
+    Run all signature rules against file content.
+    Returns verdict: CLEAN / SUSPICIOUS / MALICIOUS
+    """
+    matched = []
+
+    for rule in SIGNATURE_RULES:
+        for pattern in rule["patterns"]:
+            if pattern in data:
+                matched.append({
+                    "rule": rule["name"],
+                    "severity": rule["severity"],
+                    "description": rule["description"],
+                    "matched_pattern": pattern.decode("utf-8", errors="replace"),
+                })
+                break  # one match per rule is enough
+
+    if not matched:
+        verdict = "CLEAN"
+        severity = "CLEAN"
+    else:
+        severities = [m["severity"] for m in matched]
+        severity = min(severities, key=lambda s: SEVERITY_ORDER.get(s, 99))
+        verdict = "MALICIOUS" if severity in ("CRITICAL", "HIGH") else "SUSPICIOUS"
+
+    return {
+        "verdict": verdict,
+        "severity": severity,
+        "matched_rules_count": len(matched),
+        "matched_rules": matched,
+        "note": (
+            "Submit SHA256 to https://virustotal.com for confirmation"
+            if verdict != "CLEAN"
+            else "No known signatures matched"
+        ),
+    }
+
+
+# ──────────────────────────────────────────────
+# Static Analysis Functions
+# ──────────────────────────────────────────────
 
 def compute_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -53,6 +229,8 @@ def detect_file_type(data: bytes) -> str:
         b"%PDF": "PDF Document",
         b"\x89PNG": "PNG Image",
         b"\xff\xd8\xff": "JPEG Image",
+        b"#!/": "Shell Script",
+        b"#!": "Script (shebang)",
     }
     for magic, label in signatures.items():
         if data[:len(magic)] == magic:
@@ -81,8 +259,12 @@ def extract_strings(data: bytes, min_len: int = 6) -> list:
     return list(dict.fromkeys(result))[:100]
 
 
+# ──────────────────────────────────────────────
+# Core Download + Analysis
+# ──────────────────────────────────────────────
+
 def analyze_and_save(url: str):
-    """Download URL safely and run static analysis."""
+    """Download URL safely and run static analysis + signature matching."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
@@ -94,6 +276,7 @@ def analyze_and_save(url: str):
         "error": None,
         "file_info": {},
         "static_analysis": {},
+        "threat_classification": {},
     }
 
     try:
@@ -107,6 +290,7 @@ def analyze_and_save(url: str):
         entropy = compute_entropy(content)
         strings = extract_strings(content)
         file_type = detect_file_type(content)
+        threat = match_signatures(content)
 
         os.makedirs(SAVE_DIR, exist_ok=True)
         file_path = os.path.join(SAVE_DIR, f"{sha256}.bin")
@@ -123,14 +307,20 @@ def analyze_and_save(url: str):
         }
         report["static_analysis"] = {
             "entropy": entropy,
+            "entropy_interpretation": (
+                "High — likely encrypted/packed (suspicious)" if entropy > 7.0
+                else "Medium — mixed content" if entropy > 4.0
+                else "Low — likely plaintext"
+            ),
             "strings_count": len(strings),
             "strings_sample": strings[:20],
         }
+        report["threat_classification"] = threat
 
     except Exception as e:
         report["status"] = "error"
         report["error"] = str(e)
-    
+
     finally:
         try:
             sha256_key = report.get("file_info", {}).get("sha256", "unknown")
@@ -141,6 +331,10 @@ def analyze_and_save(url: str):
         except Exception:
             pass
 
+
+# ──────────────────────────────────────────────
+# Flask API
+# ──────────────────────────────────────────────
 
 @app.route("/is_ready", methods=["GET"])
 def is_ready():
