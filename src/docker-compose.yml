@@ -71,6 +71,11 @@ services:
       CREDENTIALS_FILE: "*"
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 8022
+      WCAT_HANDLER: wcat:8002
+    ports:
+      - "2222:8022"
+    networks:
+      - ohra-network
     depends_on:
       loghandler:
         condition: service_healthy

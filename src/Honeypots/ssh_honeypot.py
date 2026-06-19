@@ -7,6 +7,7 @@ https://github.com/qeeqbox/honeypots/blob/main/honeypots/ssh_server.py
 import logging
 import re
 import socket
+import threading
 import traceback
 
 from binascii import hexlify
@@ -188,6 +189,73 @@ class SSHPot(BaseHoneypot):
                 conn.send(recv)
         return user_in.strip().decode(errors="replace")
 
+    # regex to detect curl/wget commands with a URL
+    __download_cmd_regex = re.compile(
+        r'(?:curl|wget)\s+.*?(https?://[^\s;|&>]+)',
+        re.IGNORECASE
+    )
+
+    def __extract_download_url(self, command: str):
+        """
+        If the command is a curl/wget with a URL, return the URL.
+        Otherwise return None.
+        """
+        match = self.__download_cmd_regex.search(command)
+        if match:
+            return match.group(1)
+        return None
+
+    def __send_to_wcat(self, url: str, s_id: str, ip: str):
+        """
+        Dispatch URL to WCAT container for safe download + analysis.
+        Non-blocking — runs in background thread.
+        """
+        import os
+        import requests as req
+        wcat_addr = os.environ.get("WCAT_HANDLER", None)
+        if not wcat_addr:
+            self.log("WCAT_HANDLER not set — skipping malware fetch", "INFO")
+            return
+        try:
+            req.post(
+                f"http://{wcat_addr}/analyze",
+                json={"urls": [url], "session_id": s_id, "ip": ip},
+                timeout=5,
+            )
+            self.log(f"Dispatched URL to WCAT: {url} [{s_id}]", "INFO")
+        except Exception:
+            self.log(f"Could not reach WCAT for URL: {url}", "ERROR")
+
+    def __send_fake_download(self, conn: Channel, url: str):
+        """
+        Send a realistic fake curl download progress bar to the attacker.
+        Makes the honeypot convincing — attacker thinks malware downloaded.
+        """
+        import time
+        filename = url.split("/")[-1] or "malware"
+        fake_size = 4096
+
+        # Fake curl header
+        conn.send(f"  % Total    % Received  % Xferd  Average Speed   Time    Time     Time  Current
+".encode())
+        conn.send(f"                                 Dload  Upload   Total   Spent    Left  Speed
+".encode())
+
+        # Animate progress bar
+        for pct in [10, 25, 50, 75, 100]:
+            received = int(fake_size * pct / 100)
+            bar = "/" * (pct // 10)
+            conn.send(
+                f"{pct:3d} {fake_size:5d} {pct:3d} {received:5d}    0     0   2048      0  0:00:0{pct//25+1}  {bar}".encode()
+            )
+            time.sleep(0.4)
+
+        conn.send(f"
+100 {fake_size} 100 {fake_size}    0     0   2048      0  0:00:02
+".encode())
+        conn.send(f"///////////100% downloaded — saved as '{filename}'
+".encode())
+
     def __send_llm_response(
         self, conn: Channel, s_id: str, ip: str, username: str, user_input: str
     ):
@@ -253,8 +321,23 @@ class SSHPot(BaseHoneypot):
                 )
                 break
 
-            # handle LLM response
-            self.__send_llm_response(conn, s_id, ip, username, user_input)
+            # check if attacker is trying to download something
+            dl_url = self.__extract_download_url(user_input)
+            if dl_url:
+                # log the detected URL
+                self.session_log(s_id, f"DOWNLOAD DETECTED: {dl_url}", "WCAT", "ssh", ip)
+                # send fake progress bar to attacker (blocking, so they see it)
+                self.__send_fake_download(conn, dl_url)
+                # dispatch real download to WCAT in background (non-blocking)
+                thread = threading.Thread(
+                    target=self.__send_to_wcat,
+                    args=(dl_url, s_id, ip),
+                    daemon=True
+                )
+                thread.start()
+            else:
+                # handle LLM response normally
+                self.__send_llm_response(conn, s_id, ip, username, user_input)
 
     def handle_connections(self, client=None, key=None):
         try:
