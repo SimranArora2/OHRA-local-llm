@@ -50,6 +50,7 @@ services:
       CREDENTIALS_FILE: "*"
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 8080
+      WCAT_HANDLER: wcat:8002
     ports: # remote to in-container
       - "8080:8000"
     networks:
@@ -111,6 +112,7 @@ services:
       CREDENTIALS_FILE: "*"
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 23
+      WCAT_HANDLER: wcat:8002
     depends_on:
       loghandler:
         condition: service_healthy
@@ -132,6 +134,7 @@ services:
       LISTENING_INTERFACE: "0.0.0.0" # inside the container
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 21
+      WCAT_HANDLER: wcat:8002
     #   - "8021:8000"
     depends_on:
       loghandler:

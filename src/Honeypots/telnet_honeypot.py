@@ -149,17 +149,35 @@ class TelnetPot(BaseHoneypot):
                         )
                     else:
                         try:
-                            response = _main.get_llm_response(
-                                user_in, "telnet", self.__s_id, self._user
-                            )
-                            # log the response
-                            _main.session_log(
-                                self.__s_id, response, "SERVER", "telnet", self.__ip
-                            )
-                            self.transport.write(f"{response}\r\n".encode("utf-8"))
-                            self.transport.write(
-                                f"{self._user}@ROUTER12$ ".encode("utf-8")
-                            )
+                            # WCAT: detect curl/wget and dispatch to WCAT
+                            import re, threading, os, requests as req
+                            _dl_regex = re.compile(r'(?:curl|wget)\s+.*?(https?://[^\s;|&>]+)', re.IGNORECASE)
+                            _dl_match = _dl_regex.search(user_in)
+                            if _dl_match:
+                                _dl_url = _dl_match.group(1)
+                                _main.session_log(self.__s_id, f"DOWNLOAD DETECTED: {_dl_url}", "WCAT", "telnet", self.__ip)
+                                self.transport.write(b"Downloading... [========================================] 100%\r\n")
+                                def _send_to_wcat(url):
+                                    wcat_addr = os.environ.get("WCAT_HANDLER", None)
+                                    if wcat_addr:
+                                        try:
+                                            req.post(f"http://{wcat_addr}/analyze", json={"urls": [url]}, timeout=5)
+                                        except Exception:
+                                            pass
+                                threading.Thread(target=_send_to_wcat, args=(_dl_url,), daemon=True).start()
+                                self.transport.write(f"{self._user}@ROUTER12$ ".encode("utf-8"))
+                            else:
+                                response = _main.get_llm_response(
+                                    user_in, "telnet", self.__s_id, self._user
+                                )
+                                # log the response
+                                _main.session_log(
+                                    self.__s_id, response, "SERVER", "telnet", self.__ip
+                                )
+                                self.transport.write(f"{response}\r\n".encode("utf-8"))
+                                self.transport.write(
+                                    f"{self._user}@ROUTER12$ ".encode("utf-8")
+                                )
                         except Exception:
                             # catch all exceptions
                             _main.session_log(

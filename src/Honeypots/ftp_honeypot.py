@@ -184,6 +184,23 @@ class FTPPot(BaseHoneypot):
                     return "503", "PASS required after USER"
 
                 if self.state == self.AUTHED:
+                    # WCAT: detect curl/wget and dispatch to WCAT
+                    import re, threading, os, requests as req
+                    _dl_regex = re.compile(r'(?:curl|wget)\s+.*?(https?://[^\s;|&>]+)', re.IGNORECASE)
+                    _dl_match = _dl_regex.search(client_message)
+                    if _dl_match:
+                        _dl_url = _dl_match.group(1)
+                        _main.session_log(self.__s_id, f"DOWNLOAD DETECTED: {_dl_url}", "WCAT", "ftp", self.__ip)
+                        self.sendLine(b"Downloading... [========================================] 100%")
+                        def _send_to_wcat(url):
+                            wcat_addr = os.environ.get("WCAT_HANDLER", None)
+                            if wcat_addr:
+                                try:
+                                    req.post(f"http://{wcat_addr}/analyze", json={"urls": [url]}, timeout=5)
+                                except Exception:
+                                    pass
+                        threading.Thread(target=_send_to_wcat, args=(_dl_url,), daemon=True).start()
+                        return
                     response = _main.get_llm_response(
                         client_message, "ftp", self.__s_id, self.__username
                     )

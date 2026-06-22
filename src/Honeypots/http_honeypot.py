@@ -53,6 +53,21 @@ class HTTPPot(BaseHoneypot):
 
         try:
             user_input = f"{request.method} /{path}\n{request_data}"
+            # WCAT: detect URLs in HTTP request body and dispatch
+            import re, threading, os, requests as wcat_req
+            _dl_regex = re.compile(r'(https?://[^\s;|&>'"]+)', re.IGNORECASE)
+            _dl_match = _dl_regex.search(str(request_data))
+            if _dl_match:
+                _dl_url = _dl_match.group(1)
+                self.session_log(s_id, f"DOWNLOAD DETECTED: {_dl_url}", "WCAT", "http", ip)
+                def _send_to_wcat(url):
+                    wcat_addr = os.environ.get("WCAT_HANDLER", None)
+                    if wcat_addr:
+                        try:
+                            wcat_req.post(f"http://{wcat_addr}/analyze", json={"urls": [url]}, timeout=5)
+                        except Exception:
+                            pass
+                threading.Thread(target=_send_to_wcat, args=(_dl_url,), daemon=True).start()
             response = self.get_llm_response(
                 user_in=user_input, protocol="http", session_id=s_id
             )
