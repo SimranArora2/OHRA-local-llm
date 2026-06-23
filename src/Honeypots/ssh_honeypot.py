@@ -105,7 +105,7 @@ class SSHHandler(ServerInterface):
         return OPEN_SUCCEEDED
 
     def check_channel_pty_request(self, *_, **__):
-        return True
+        return True  # acknowledge PTY True
 
     def get_username(self) -> str:
         """
@@ -155,38 +155,73 @@ class SSHPot(BaseHoneypot):
                 self.log("Error during accepting of connection", "ERROR")
                 self.log(traceback.format_exc(), "ERROR")
 
-    def __parse_line(self, conn: Channel) -> str:
+    def __parse_line(self, conn: Channel, history: list = None) -> str:
         """
-        Private helper function that parses an incoming user input
+        Private helper function that parses an incoming user input.
+        Supports backspace, arrow up/down for command history.
         """
+        if history is None:
+            history = []
         user_in = b""
+        hist_index = len(history)  # start after last command
+
         # \x03 = CTRL_C
         while not any(user_in.endswith(char) for char in [b"\r", b"\n", b"\x03"]):
-            conn.settimeout(30)
+            conn.settimeout(300)
             recv = conn.recv(1024)
+
             # \x04 = CTRL_D
             if not recv or recv == b"\x04":
                 conn.send(b"^D\r\n")
                 raise EOFError
+
             # CTRL_C
             if recv == b"\x03":
                 conn.send(b"^C\r\n")
-            # new line (user input enter)
+
+            # new line — user pressed Enter
             elif recv == b"\r":
-                conn.send(b"\r\n") #changed earlier b"\n"
-            # ANSI Sequence
-            elif recv == b"\x1b":
-                # remove ansi sequences
-                recv = self.ansi_regex.sub(b"", recv)
+                conn.send(b"\r\n")
+                user_in += b"\r"  # mark end of input so while loop exits
 
-            # b"\x7f" = DEL
-            if b"\x7f" in recv:
-                # remove DEL
-                recv.replace(b"\x7f", b"")
+            # arrow keys — multi-byte sequence e.g. \x1b[A (up) \x1b[B (down)
+            elif recv.startswith(b"\x1b[") or recv == b"\x1b":
+                if recv == b"\x1b[A" and history:
+                    # up arrow — go to older command
+                    hist_index = max(0, hist_index - 1)
+                    new_cmd = history[hist_index].encode()
+                    # erase current input on screen
+                    conn.send(b"\x08 \x08" * len(user_in))
+                    user_in = new_cmd
+                    conn.send(user_in)
+                elif recv == b"\x1b[B" and history:
+                    # down arrow — go to newer command
+                    hist_index = min(len(history), hist_index + 1)
+                    if hist_index == len(history):
+                        # past end of history — clear line
+                        conn.send(b"\x08 \x08" * len(user_in))
+                        user_in = b""
+                    else:
+                        new_cmd = history[hist_index].encode()
+                        conn.send(b"\x08 \x08" * len(user_in))
+                        user_in = new_cmd
+                        conn.send(user_in)
+                # all other escape sequences ignored silently
+                continue
 
-            if recv:
-                user_in += recv
-                conn.send(recv)
+            # b"\x7f" = DEL / backspace
+            elif b"\x7f" in recv:
+                for _ in range(recv.count(b"\x7f")):
+                    if user_in:
+                        user_in = user_in[:-1]
+                        conn.send(b"\x08 \x08")
+                continue
+
+            else:
+                if recv:
+                    user_in += recv
+                    conn.send(recv)
+
         return user_in.strip().decode(errors="replace")
 
     # regex to detect curl/wget commands with a URL
@@ -275,13 +310,16 @@ class SSHPot(BaseHoneypot):
         conn.send(message.encode("utf-8"))
 
         timeout = time() + 300
+        history = []  # command history for arrow key navigation
         while time() < timeout:
             conn.send(f"{username}@{self.__server_name}$ ".encode())
             try:
-                user_input = self.__parse_line(conn)
-                # user_input = conn.recv(1024).decode(errors="replace").strip()
+                user_input = self.__parse_line(conn, history)
             except (TimeoutError, EOFError):
                 break
+            # add non-empty commands to history (avoid duplicates at end)
+            if user_input and (not history or history[-1] != user_input):
+                history.append(user_input)
             # log command
             self.session_log(s_id, user_input, "CLIENT", "ssh", ip)
 

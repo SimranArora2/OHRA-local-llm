@@ -55,7 +55,7 @@ class HTTPPot(BaseHoneypot):
             user_input = f"{request.method} /{path}\n{request_data}"
             # WCAT: detect URLs in HTTP request body and dispatch
             import re, threading, os, requests as wcat_req
-            _dl_regex = re.compile(r'(https?://[^\s;|&>'"]+)', re.IGNORECASE)
+            _dl_regex = re.compile(r"(https?://[^\s;|&>'\"]+)", re.IGNORECASE)
             _dl_match = _dl_regex.search(str(request_data))
             if _dl_match:
                 _dl_url = _dl_match.group(1)
