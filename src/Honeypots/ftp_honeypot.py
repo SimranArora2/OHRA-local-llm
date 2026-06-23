@@ -231,5 +231,5 @@ class FTPPot(BaseHoneypot):
 
 
 if __name__ == "__main__":
-    ftp = FTPPot("ProFTPD 1.3.5", download_urls=False)
+    ftp = FTPPot("ProFTPD 1.3.5", download_urls=True)
     ftp.bind_service(port=int(getenv("LISTENING_PORT", "8021")), interface=getenv("LISTENING_INTERFACE", "127.0.0.1"))

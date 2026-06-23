@@ -87,7 +87,7 @@ class HTTPPot(BaseHoneypot):
 
 
 app = Flask(__name__)
-http = HTTPPot("Dev-Server-12", download_urls=False)
+http = HTTPPot("Dev-Server-12", download_urls=True)
 
 # set the secret key upon startup
 app.secret_key = secrets.token_hex(32)
