@@ -8,10 +8,7 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && pip3 install --no-cache-dir flask requests \
     && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup --disabled-password
-RUN mkdir -p /app/downloaded_content && chown appuser /app/downloaded_content
-
-USER appuser
+RUN mkdir -p /app/downloaded_content
 
 COPY wcat_handler.py ./wcat_handler.py
 

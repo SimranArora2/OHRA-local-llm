@@ -89,10 +89,8 @@ services:
       dockerfile: Dockerfile
     environment:
       WCAT_SAVE_DIR: /app/downloaded_content
-      WCAT_CONTAINER_NAME: src-wcat-1
     volumes:
       - downloaded_content:/app/downloaded_content
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - ohra-network
     ports:
@@ -131,14 +129,13 @@ services:
       dockerfile: DockerfileFTP
     environment:
       LOG_HANDLER: loghandler:8000
-      LLM_HANDLER: llmhandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
       CREDENTIALS_FILE: "*"
       LISTENING_INTERFACE: "0.0.0.0" # inside the container
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 21
       WCAT_HANDLER: wcat:8002
-    networks:
-      - ohra-network
+    #   - "8021:8000"
     depends_on:
       loghandler:
         condition: service_healthy
@@ -151,14 +148,12 @@ services:
       dockerfile: DockerfileSMTP
     environment:
       LOG_HANDLER: loghandler:8000
-      LLM_HANDLER: llmhandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
       CREDENTIALS_FILE: "*"
       LISTENING_INTERFACE: "0.0.0.0" # inside the container
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 25
     #   - "8025:8000"
-    networks:
-      - ohra-network
     depends_on:
       loghandler:
         condition: service_healthy
@@ -171,14 +166,12 @@ services:
       dockerfile: DockerfileSNMP
     environment:
       LOG_HANDLER: loghandler:8000
-      LLM_HANDLER: llmhandler:8000
+      LLM_HANDLER: 127.0.0.1:8000
       CREDENTIALS_FILE: "*"
       LISTENING_INTERFACE: "0.0.0.0" # inside the container
       PYTHONUNBUFFERED: 1
       LISTENING_PORT: 162
     #   - "8161:8000"
-    networks:
-      - ohra-network
     depends_on:
       loghandler:
         condition: service_healthy

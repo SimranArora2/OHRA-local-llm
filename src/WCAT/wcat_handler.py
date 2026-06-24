@@ -315,7 +315,26 @@ def analyze_and_save(url: str):
             "strings_count": len(strings),
             "strings_sample": strings[:20],
         }
+       
         report["threat_classification"] = threat
+
+       # AUTO-RESET ON MALWARE DETECTION
+        verdict = threat.get("verdict", "CLEAN")
+        if verdict in ["MALICIOUS", "RANSOMWARE"]:
+            print(f"⚠️  MALWARE DETECTED: {verdict} — Container auto-reset triggered!")
+            import socket as _sock, http.client as _http
+            container_name = os.environ.get("WCAT_CONTAINER_NAME", "src-wcat-1")
+            try:
+                class _UnixHTTP(_http.HTTPConnection):
+                    def connect(self):
+                        self.sock = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
+                        self.sock.connect("/var/run/docker.sock")
+                conn = _UnixHTTP("localhost")
+                conn.request("POST", f"/v1.41/containers/{container_name}/restart")
+                resp = conn.getresponse()
+                print(f"✅ WCAT reset triggered (HTTP {resp.status})")
+            except Exception as _e:
+                print(f"❌ Reset failed: {_e}")
 
     except Exception as e:
         report["status"] = "error"
