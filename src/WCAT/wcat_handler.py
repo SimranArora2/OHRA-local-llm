@@ -342,6 +342,17 @@ def analyze_and_save(url: str):
        
         report["threat_classification"] = threat
 
+        # SAVE REPORT IMMEDIATELY after analysis (before any reset)
+        try:
+            sha256_key = report.get("file_info", {}).get("sha256", "unknown")
+            report_path = os.path.join(SAVE_DIR, f"{sha256_key}_report.json")
+            os.makedirs(SAVE_DIR, exist_ok=True)
+            with open(report_path, "w") as f:
+                json.dump(report, f, indent=2)
+            print(f"Report saved: {report_path}")
+        except Exception as _re:
+            print(f"Report save failed: {_re}")
+
        # AUTO-RESET ON MALWARE DETECTION
         verdict = threat.get("verdict", "CLEAN")
         if verdict in ["MALICIOUS", "RANSOMWARE"]:
