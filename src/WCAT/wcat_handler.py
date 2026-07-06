@@ -7,6 +7,8 @@ static analysis — closes the gap where EICAR was detected but not flagged.
 """
 
 import hashlib
+import time
+import zipfile
 import json
 import math
 import os
@@ -20,6 +22,7 @@ import requests
 from flask import Flask, request, jsonify
 
 SAVE_DIR = os.environ.get("WCAT_SAVE_DIR", "/app/downloaded_content")
+ARCHIVE_DIR = os.environ.get("MALWARE_ARCHIVE_DIR", "/app/malware_archive")
 app = Flask(__name__)
 
 
@@ -263,6 +266,27 @@ def extract_strings(data: bytes, min_len: int = 6) -> list:
 # Core Download + Analysis
 # ──────────────────────────────────────────────
 
+
+def archive_malware(file_path: str, sha256: str, verdict: str, matched_rules: list):
+    """
+    Compress malware binary with password infected (industry standard).
+    Saved to host-mounted directory BEFORE container auto-reset.
+    Password: infected — same standard used by VirusTotal, MalwareBazaar, CERT.
+    """
+    try:
+        os.makedirs(ARCHIVE_DIR, exist_ok=True)
+        rule_names = "_".join(r["rule"].replace(" ", "-")[:20] for r in matched_rules[:2])
+        archive_name = f"{sha256[:16]}_{verdict}_{rule_names}.zip"
+        archive_path = os.path.join(ARCHIVE_DIR, archive_name)
+        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.setpassword(b"infected")
+            zf.write(file_path, arcname=f"{sha256}.bin")
+        print(f"Malware archived: {archive_path}")
+        return archive_path
+    except Exception as e:
+        print(f"Archive failed: {e}")
+        return None
+
 def analyze_and_save(url: str):
     """Download URL safely and run static analysis + signature matching."""
     headers = {
@@ -321,6 +345,8 @@ def analyze_and_save(url: str):
        # AUTO-RESET ON MALWARE DETECTION
         verdict = threat.get("verdict", "CLEAN")
         if verdict in ["MALICIOUS", "RANSOMWARE"]:
+            archive_malware(file_path, sha256, verdict, threat.get("matched_rules", []))
+            time.sleep(2)  # wait for ZIP write to complete before reset
             print(f"⚠️  MALWARE DETECTED: {verdict} — Container auto-reset triggered!")
             import socket as _sock, http.client as _http
             container_name = os.environ.get("WCAT_CONTAINER_NAME", "src-wcat-1")

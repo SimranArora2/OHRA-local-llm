@@ -6,8 +6,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/is_ready"]
       interval: 5s
-      timeout: 3s
+      timeout: 10s
       retries: 20
+      start_period: 30s
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       HF_HOME: /tmp/hf_cache
@@ -24,8 +25,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/is_ready"]
       interval: 5s
-      timeout: 3s
+      timeout: 10s
       retries: 20
+      start_period: 30s
     environment:
       rate_limit: ${RATE_LIMIT}
       rate_reset: ${RATE_RESET}
@@ -90,8 +92,10 @@ services:
     environment:
       WCAT_SAVE_DIR: /app/downloaded_content
       WCAT_CONTAINER_NAME: src-wcat-1
+      MALWARE_ARCHIVE_DIR: /app/malware_archive
     volumes:
-      - downloaded_content:/app/downloaded_content
+      - /Users/simranarora02/Desktop/wcat_malware_archive/downloads:/app/downloaded_content
+      - /Users/simranarora02/Desktop/wcat_malware_archive/archive:/app/malware_archive
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - ohra-network
@@ -208,7 +212,5 @@ networks:
   ohra-network:
 
 volumes:
-  downloaded_content:
-
   logs:
   data: 

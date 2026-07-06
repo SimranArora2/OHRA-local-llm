@@ -116,7 +116,7 @@ class LLMHandler:
         # trim messages to not crash the context window
         trimmed_messages = trim_messages(
             messages=state["messages"],
-            max_tokens=100,
+            max_tokens=500,
             strategy="last",
             token_counter=self.__client,
             include_system=False,  # drop system prompt since we will add it again

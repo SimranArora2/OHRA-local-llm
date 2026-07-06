@@ -254,7 +254,7 @@ class BaseHoneypot:
 
         try:
             res = requests.post(
-                f"http://{self.__llm_addr}/get_response", json=post_data, timeout=20
+                f"http://{self.__llm_addr}/get_response", json=post_data, timeout=60
             )
             if res.status_code != 200:
                 # fatal error as something went wrong in the llm handler/wrapper
@@ -268,7 +268,7 @@ class BaseHoneypot:
 
         except requests.exceptions.Timeout as exc:
             # fatal error since we did not get a response
-            self.log(traceback.format_exc, "FATAL ERROR")
+            self.log(traceback.format_exc(), "FATAL ERROR")
             raise exc
 
         if self.__download_urls:

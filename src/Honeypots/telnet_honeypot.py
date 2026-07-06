@@ -4,7 +4,11 @@ The approach for designing this Honeypot was taken and adapted from
 https://github.com/qeeqbox/honeypots/blob/main/honeypots/telnet_server.py
 """
 
+import re
+import threading
 import traceback
+
+import requests
 
 from os import getenv
 
@@ -149,8 +153,6 @@ class TelnetPot(BaseHoneypot):
                         )
                     else:
                         try:
-                            # WCAT: detect curl/wget and dispatch to WCAT
-                            import re, threading, os, requests as req
                             _dl_regex = re.compile(r'(?:curl|wget)\s+.*?(https?://[^\s;|&>]+)', re.IGNORECASE)
                             _dl_match = _dl_regex.search(user_in)
                             if _dl_match:
@@ -161,7 +163,7 @@ class TelnetPot(BaseHoneypot):
                                     wcat_addr = os.environ.get("WCAT_HANDLER", None)
                                     if wcat_addr:
                                         try:
-                                            req.post(f"http://{wcat_addr}/analyze", json={"urls": [url]}, timeout=5)
+                                            requests.post(f"http://{wcat_addr}/analyze", json={"urls": [url]}, timeout=5)
                                         except Exception:
                                             pass
                                 threading.Thread(target=_send_to_wcat, args=(_dl_url,), daemon=True).start()
@@ -170,7 +172,6 @@ class TelnetPot(BaseHoneypot):
                                 response = _main.get_llm_response(
                                     user_in, "telnet", self.__s_id, self._user
                                 )
-                                # log the response
                                 _main.session_log(
                                     self.__s_id, response, "SERVER", "telnet", self.__ip
                                 )
@@ -179,7 +180,11 @@ class TelnetPot(BaseHoneypot):
                                     f"{self._user}@ROUTER12$ ".encode("utf-8")
                                 )
                         except Exception:
-                            # catch all exceptions
+                            # keep session alive even if LLM times out
+                            self.transport.write(b"Command failed. Please try again.\r\n")
+                            self.transport.write(f"{self._user}@ROUTER12$ ".encode("utf-8"))
+                            print(traceback.format_exc())
+
                             _main.session_log(
                                 self.__s_id,
                                 "Failed to get response",
@@ -187,9 +192,7 @@ class TelnetPot(BaseHoneypot):
                                 "telnet",
                                 self.__ip,
                             )
-                            _main.log(
-                                "Error during the retrieval of a LLM response!", "ERROR"
-                            )
+
                             _main.log(traceback.format_exc(), "ERROR")
                             self.transport.loseConnection()
         try:
