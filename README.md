@@ -92,6 +92,30 @@ Key fixes in the original codebase:
 - Missing curl in llmhandler/loghandler Dockerfiles (healthcheck always failing)
 - Debian apt mirror over HTTP timing out — switched to HTTPS
 
+
+### 4. Threat-Weighted Memory Pruning
+
+Adapted from HoneyGPT's Vi-score memory pruning, redesigned for local LLM constraints:
+
+- Llama 3.1 has 8k context window vs GPT-4's 128k — pruning is essential, not optional
+- Each attacker command is scored by penetration testing stage (0.1 recon → 0.95 post-exploit)
+- Composite commands (&&, |, ;) split into atomic operations, score = max across atoms
+- High-threat commands (exploit/post-exploit) retained longer in context
+- Low-threat commands (recon) pruned first when context fills up
+
+| Stage             | Example Commands           | Weight     |
+|-------------------|----------------------------|------------|
+| Reconnaissance    | ls, whoami, id, uname      | 0.1 – 0.3  |
+| Vulnerability ID  | find, cat /etc/passwd, ps  | 0.4 – 0.6  |
+| Exploitation      | wget, curl, nc, bash -i    | 0.7 – 0.9  |
+| Post Exploitation | chmod, crontab, useradd    | 0.8 – 0.95 |
+
+Key difference from HoneyGPT: HoneyGPT prunes by recency + impact decay.
+MIRAGE prunes by attacker stage — exploit-stage commands stay in context
+even if they happened early in the session.
+
+---
+
 ---
 
 ## Architecture
