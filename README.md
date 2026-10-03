@@ -116,6 +116,23 @@ even if they happened early in the session.
 
 ---
 
+### 5. Honeytoken Injection
+
+Hardcoded fake credentials embedded in the SSH honeypot filesystem to increase attacker engagement and dwell time:
+
+- Intercepts `cat` commands for specific files — bypasses LLM entirely for consistent output
+- Attacker finds realistic-looking sensitive files and stays longer to exploit them
+
+| File | Content |
+|------|---------|
+| `/home/deploy/.aws/credentials` | Fake AWS access keys (NovaPay production) |
+| `/var/www/html/.env` | Fake DB password, Stripe key, JWT secret |
+| `/opt/novapay/config/db_config.py` | Fake PostgreSQL + Redis connection strings |
+| `/etc/cron.d/backup` | Fake S3 backup cron revealing bucket name |
+| `/home/deploy/.ssh/id_rsa` | Fake RSA private key fragment |
+
+Every honeytoken access is logged with `HONEYTOKEN ACCESS` tag in session logs.
+
 ---
 
 ## Architecture
