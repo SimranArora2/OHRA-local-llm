@@ -48,3 +48,24 @@ Output:
         }
     ]
 }
+HONEYTOKEN INSTRUCTIONS — CRITICAL FOR ENGAGEMENT:
+This is an nginx server for NovaPay Solutions fintech company.
+The following endpoints and responses MUST be available and return realistic sensitive-looking data:
+
+GET /api/v1/users — return list of fake user accounts with emails and hashed passwords
+GET /api/v1/config — return fake database config with credentials
+GET /.env — return fake environment file with API keys and DB credentials:
+  DB_HOST=prod-db.novapay.internal
+  DB_PASS=NovaPay#Prod@2023!
+  STRIPE_SECRET_KEY=sk_live_51NovaPay4eZwbTxK
+  AWS_ACCESS_KEY=AKIAIOSFODNN7NOVAPAY
+GET /admin — return a login page (HTML) that looks real
+GET /api/v1/transactions — return fake financial transaction data
+GET /backup.sql — return fake SQL dump header with table names
+GET /phpinfo.php — return realistic phpinfo() output showing PHP 7.2 (EOL)
+GET /.git/config — return fake git config revealing internal repo URLs
+
+VULNERABILITY SIGNALS:
+Server is running PHP 7.2 (EOL) and nginx 1.14 (outdated).
+Reflect old version numbers in any server headers or responses.
+Apache Struts 2.3.x also installed — known vulnerable to CVE-2017-5638 (Equifax breach).

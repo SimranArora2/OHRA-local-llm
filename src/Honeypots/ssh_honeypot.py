@@ -114,6 +114,60 @@ class SSHHandler(ServerInterface):
         return self.__username
 
 
+
+# ── Hardcoded Honeytoken Files (bypass LLM for these) ─────────────────────────
+HONEYTOKEN_FILES = {
+    "/home/deploy/.aws/credentials": """[default]
+aws_access_key_id = AKIAIOSFODNN7NOVAPAY
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYNOVAPAY2024
+region = ap-south-1
+
+[prod]
+aws_access_key_id = AKIA4NOVAPAY9PROD001
+aws_secret_access_key = 9drTJvcXLB89NOVAPAY/xRfiCY2024PROD
+region = ap-south-1""",
+
+    "/var/www/html/.env": """DB_HOST=prod-db.novapay.internal
+DB_USER=novapay_admin
+DB_PASS=NovaPay#Prod@2023!
+STRIPE_SECRET_KEY=sk_live_51NovaPay4eZwbTxKreal
+JWT_SECRET=novapay_jwt_secret_do_not_share
+AWS_ACCESS_KEY=AKIAIOSFODNN7NOVAPAY
+AWS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYNOVAPAY2024
+APP_ENV=production
+APP_DEBUG=false""",
+
+    "/opt/novapay/config/db_config.py": """DB_CONFIG = {
+    'host': 'prod-db.novapay.internal',
+    'port': 5432,
+    'user': 'novapay_admin',
+    'password': 'NovaPay#Prod@2023!',
+    'database': 'novapay_production'
+}
+REDIS_URL = 'redis://:NovaPay@Redis2023@redis.novapay.internal:6379/0'""",
+
+    "/etc/cron.d/backup": """# NovaPay production backup
+0 2 * * * deploy aws s3 sync /var/www/html s3://novapay-prod-backups --delete
+0 3 * * * deploy pg_dump novapay_production | aws s3 cp - s3://novapay-prod-backups/db/backup.sql""",
+
+    "/home/deploy/.ssh/id_rsa": """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA0Z3VS5JJcds3xHn/ygWep4PAtEsHAhCB1WFBSBQGbYBsF3NG
+NOVAPAY_PRIVATE_KEY_DO_NOT_SHARE
+-----END RSA PRIVATE KEY-----""",
+}
+
+def _check_honeytoken(user_input: str) -> str | None:
+    """Check if command is reading a honeytoken file. Return content or None."""
+    import re
+    # match: cat /path/to/file or cat "/path" etc
+    match = re.match(r'cat\s+["\']?(/[^"\'\s]+)["\']?', user_input.strip())
+    if match:
+        path = match.group(1)
+        if path in HONEYTOKEN_FILES:
+            return HONEYTOKEN_FILES[path]
+    return None
+# ── End Honeytoken Files ───────────────────────────────────────────────────────
+
 class SSHPot(BaseHoneypot):
     """
     Honeypot for SSH
@@ -345,8 +399,14 @@ class SSHPot(BaseHoneypot):
                 )
                 thread.start()
             else:
-                # handle LLM response normally
-                self.__send_llm_response(conn, s_id, ip, username, user_input)
+                # check honeytoken files first — bypass LLM for these
+                honeytoken_content = _check_honeytoken(user_input)
+                if honeytoken_content:
+                    self.session_log(s_id, f"HONEYTOKEN ACCESS: {user_input}", "HONEYTOKEN", "ssh", ip)
+                    conn.send((honeytoken_content.replace("\n", "\r\n") + "\r\n").encode("utf-8"))
+                else:
+                    # handle LLM response normally
+                    self.__send_llm_response(conn, s_id, ip, username, user_input)
 
     def handle_connections(self, client=None, key=None):
         try:

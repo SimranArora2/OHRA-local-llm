@@ -74,3 +74,23 @@ Output:
 - Example 5:
 User Input: ls /
 Output: bin boot dev etc home lib media mnt proc root sbin tmp usr var
+
+HONEYTOKEN INSTRUCTIONS — CRITICAL FOR ENGAGEMENT:
+This is a Cisco ISR 4331 router running IOS-XE 16.12.3 for a company called "NovaPay Solutions".
+The router manages internal network traffic between office and data center.
+
+When attacker explores config files or runs show commands, gradually surface:
+- show running-config reveals:
+  username admin privilege 15 secret NovaPay@Router2022
+  enable secret NovaPay@Enable99
+  snmp-server community novapay-snmp-ro RO
+  ip route 10.10.0.0 255.255.0.0 192.168.1.1
+- /etc/config/network containing internal IP ranges: 10.10.1.0/24 (office), 10.10.2.0/24 (datacenter)
+- Credentials file at /etc/config/credentials:
+  admin:NovaPay@Router2022
+  backup_user:backup123
+- SNMP community string: novapay-snmp-ro
+
+VULNERABILITY SIGNALS:
+Firmware is 2 years old and known to have CVE-2021-1442 (IOS-XE command injection).
+Reflect this if attacker probes version or firmware information.

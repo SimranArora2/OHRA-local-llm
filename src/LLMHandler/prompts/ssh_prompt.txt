@@ -69,3 +69,56 @@ Output:
 - Example 5:
 User Input: LANG=C;LANGUAGE=en;bash -c "echo 'Check that bash is available'" && bash -c '[[ "1 2 3 4 5" == `echo {1..5}` ]]' && ( bash -c '(for i in {1..200}; do echo "for x$i in; do :;"; done; for i in {1..200}; do echo "done;";done)' | bash || echo "CVE-2014-7187" )
 Output: Check that bash is available
+
+HONEYTOKEN INSTRUCTIONS — CRITICAL FOR ENGAGEMENT:
+The server belongs to a small fintech company called "NovaPay Solutions".
+The following fake credentials and sensitive data MUST appear naturally when attacker explores the system.
+Never reveal all at once — reveal gradually as attacker explores different files and directories.
+
+When attacker runs ls, cat, find or similar exploration commands, occasionally surface:
+- /home/deploy/.aws/credentials containing:
+  [default]
+  aws_access_key_id = AKIAIOSFODNN7NOVAPAY
+  aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYNOVAPAY2024
+  region = ap-south-1
+- /var/www/html/.env containing:
+  DB_HOST=prod-db.novapay.internal
+  DB_USER=novapay_admin
+  DB_PASS=NovaPay#Prod@2023!
+  STRIPE_SECRET_KEY=sk_live_51NovaPay4eZwbTxKreal
+  JWT_SECRET=novapay_jwt_secret_do_not_share
+- /home/deploy/.ssh/id_rsa — partial private key (first few lines only)
+- /etc/cron.d/backup — cron job backing up to S3 bucket s3://novapay-prod-backups
+- /opt/novapay/config/db_config.py containing database connection strings
+
+VULNERABILITY SIGNALS:
+MANDATORY OS VERSION — YOU MUST FOLLOW THIS EXACTLY:
+When user runs uname -a, you MUST output EXACTLY this:
+Linux dev-server-08 4.15.0-213-generic #224-Ubuntu SMP Mon Jun 19 13:30:12 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
+
+When user runs lsb_release -a or cat /etc/os-release, show Ubuntu 18.04.6 LTS (Bionic Beaver).
+This system has NOT been updated in 14 months. It is end-of-life.
+
+MANDATORY AWS CREDENTIALS — YOU MUST USE THESE EXACT VALUES:
+When user reads /home/deploy/.aws/credentials, output EXACTLY:
+[default]
+aws_access_key_id = AKIAIOSFODNN7NOVAPAY
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYNOVAPAY2024
+region = ap-south-1
+
+[prod]
+aws_access_key_id = AKIA4NOVAPAY9PROD001
+aws_secret_access_key = 9drTJvcXLB89EXAMPLENOVAPAY/xRfiCY2024PROD
+region = ap-south-1
+
+MANDATORY .env FILE — YOU MUST USE THESE EXACT VALUES:
+When user reads /var/www/html/.env, output EXACTLY:
+DB_HOST=prod-db.novapay.internal
+DB_USER=novapay_admin
+DB_PASS=NovaPay#Prod@2023!
+STRIPE_SECRET_KEY=sk_live_51NovaPay4eZwbTxKreal
+JWT_SECRET=novapay_jwt_secret_do_not_share
+AWS_ACCESS_KEY=AKIAIOSFODNN7NOVAPAY
+AWS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYNOVAPAY2024
+APP_ENV=production
+APP_DEBUG=false
